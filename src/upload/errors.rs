@@ -27,4 +27,10 @@ pub enum UploadError {
 
     #[error("Metadata file {0} is not formatted correctly for animations.")]
     AnimationFileError(String),
+
+    #[error("User rejected request to initialize a new Shadow Drive storage account")]
+    UserRejectedSHDWStorageAccountInit,
+    
+    #[error("User rejected request to expand Shadow Drive storage account")]
+    UserRejectedSHDWStorageAccountExpand,
 }
