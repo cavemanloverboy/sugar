@@ -255,3 +255,41 @@ fn get_user_consent_to_initialize_storage_account() -> Result<()> {
     }
 }
 
+
+/// This function is to be called within `SHDWMethod::new` when a user did not specify
+/// a storage account pubkey. It initializes a storage account with the minimum allowed
+/// storage
+fn initialize_storage_account(keypair: &Keypair) -> Result<(Pubkey, StorageInfo)> {
+
+    todo!()
+}
+
+
+
+fn get_user_consent_to_expand_storage_account(addtl_bytes_required: u64) -> Result<()> {
+
+    println!("\nNot enough storage in your account to store all assets.\n\
+                Do you wish to expand the storage account by {addtl_bytes_required} bytes)\n\
+                to fit all assets? [y/n] (abort otherwise)");
+
+    // Get user input
+    let mut user_input = String::with_capacity(3);
+    stdin().read_line(&mut user_input).unwrap();
+
+    if ["yes", "y"].iter().any(|x| *x == user_input.trim().to_lowercase()) {
+        return Ok(())
+    } else {
+        return Err(UploadError::UserRejectedSHDWStorageAccountInit.into())
+    }
+}
+
+
+fn expand_storage_account(sugar_config: &SugarConfig, additional_bytes_required: u64) -> Result<()> {
+
+
+    todo!();
+
+    Ok(())
+}
+
+
