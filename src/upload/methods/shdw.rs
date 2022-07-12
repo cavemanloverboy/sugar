@@ -1,14 +1,18 @@
 use std::{fs, ops::Deref, sync::Arc};
 
+use anchor_lang::Key;
 use async_trait::async_trait;
 use data_encoding::HEXLOWER;
 use reqwest::{
     multipart::{Form, Part},
-    StatusCode,
+    StatusCode, Error,
 };
 use ring::digest::{Context, SHA256};
 use solana_program::pubkey;
 use tokio::task::JoinHandle;
+use std::io::stdin;
+use std::collections::HashMap;
+use std::convert::TryInto;
 
 use crate::{
     common::*,
