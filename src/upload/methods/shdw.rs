@@ -140,22 +140,47 @@ impl SHDWMethod {
 impl Prepare for SHDWMethod {
     async fn prepare(
         &self,
-        _sugar_config: &SugarConfig,
+        sugar_config: &SugarConfig,
         assets: &HashMap<isize, AssetPair>,
         asset_indices: Vec<(DataType, &[isize])>,
     ) -> Result<()> {
-        // calculates the size of the files to upload, this assumes that the total
-        // storage has enough space to hold the collection as assets might already
-        // exist and therefore will be replaced
-        let mut total_size = 0;
+
+        // Old metaplex stuff
+        {
+            // // Calculates the size of the files to upload. This assumes that the total
+            // // storage has enough space to hold the collection as assets might already
+            // // exist and therefore will be replaced
+            // let mut total_size = 0;
+        }
+
+        // Get existing files and their sizes
+        let existing_files: HashMap<String, u64> = get_file_sizes(self.0.as_ref()).await?;
+
+        // Find out how many additional bytes are required, if any
+        // This needs to be a signed integer because if new assets are 
+        // smaller we may not require additional space.
+        let mut additional_required_bytes: i64 = 0;
 
         for (data_type, indices) in asset_indices {
             match data_type {
                 DataType::Image => {
                     for index in indices {
+
+                        // Get item size
                         let item = assets.get(index).unwrap();
                         let path = Path::new(&item.image);
-                        total_size += std::fs::metadata(path)?.len();
+                        let item_size = std::fs::metadata(path)?.len();
+
+                        // Check if this file exists in storage account
+                        let get_current_size: Option<u64> = existing_files
+                            .get(&item.image)
+                            .map(|x| *x);
+
+                        // Add file size and subtract existing size, if necessary
+                        additional_required_bytes += item_size.try_into().unwrap();
+                        if let Some(current_size) = get_current_size {
+                            additional_required_bytes -= current_size.try_into().unwrap();
+                        }
                     }
                 }
                 DataType::Animation => {
@@ -163,9 +188,17 @@ impl Prepare for SHDWMethod {
                         let item = assets.get(index).unwrap();
 
                         if let Some(animation) = &item.animation {
+                            
+                            // Add file size
                             let path = Path::new(animation);
-                            total_size += std::fs::metadata(path)?.len();
+                            let item_size = std::fs::metadata(path)?.len();
+                            additional_required_bytes += item_size.try_into().unwrap();
+
+                            // Subtract existing file size if necessary
+                            
                         }
+
+
                     }
                 }
                 DataType::Metadata => {
@@ -188,11 +221,14 @@ impl Prepare for SHDWMethod {
             }
         }
 
-        if self.storage_info.reserved_bytes < total_size {
-            let required = total_size - self.storage_info.reserved_bytes;
-            return Err(anyhow!(
-                "Insufficient storage space (additional {required} bytes required)"
-            ));
+        // Check if user have enough storage available on this storage account
+        let storage_available: u64 = self.storage_info.reserved_bytes
+            .checked_sub(self.storage_info.current_usage).unwrap();
+
+        if storage_available < total_size {
+
+            get_user_consent_to_expand_storage_account(total_size - storage_available)?;
+            expand_storage_account(sugar_config)
         }
 
         Ok(())
