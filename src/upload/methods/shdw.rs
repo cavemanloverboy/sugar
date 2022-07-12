@@ -236,3 +236,22 @@ impl Config {
         }
     }
 }
+
+
+
+fn get_user_consent_to_initialize_storage_account() -> Result<()> {
+
+    println!("\nNo Shadow Drive storage account was provided.\n\
+                Do you wish to create one? [y/n] (abort otherwise)");
+
+    // Get user input
+    let mut user_input = String::with_capacity(3);
+    stdin().read_line(&mut user_input).unwrap();
+
+    if ["yes", "y"].iter().any(|x| *x == user_input.trim().to_lowercase()) {
+        return Ok(())
+    } else {
+        return Err(UploadError::UserRejectedSHDWStorageAccountInit.into())
+    }
+}
+
