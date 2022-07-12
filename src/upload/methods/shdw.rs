@@ -62,47 +62,76 @@ impl Deref for SHDWMethod {
 
 impl SHDWMethod {
     pub async fn new(sugar_config: &SugarConfig, config_data: &ConfigData) -> Result<Self> {
+
+
+        // Set up rpc client and set shadow drive end point
+        let client = setup_client(sugar_config)?;
+        let program = client.program(SHADOW_DRIVE_PROGRAM_ID);
+        let solana_cluster: Cluster = get_cluster(program.rpc())?;
+        let endpoint = match solana_cluster {
+            Cluster::Devnet => DEVNET_ENDPOINT,
+            Cluster::Mainnet => MAINNET_ENDPOINT,
+        };
+
+        // Gather user keypair
+        let key_bytes = sugar_config.keypair.to_bytes();
+        let keypair = Keypair::from_bytes(&key_bytes)?;
+
+        // If user provides a storage account public key,
+        // send http request to get storage account info
         if let Some(pubkey) = &config_data.shdw_storage_account {
-            let client = setup_client(sugar_config)?;
-            let program = client.program(SHADOW_DRIVE_PROGRAM_ID);
-            let solana_cluster: Cluster = get_cluster(program.rpc())?;
 
-            let endpoint = match solana_cluster {
-                Cluster::Devnet => DEVNET_ENDPOINT,
-                Cluster::Mainnet => MAINNET_ENDPOINT,
-            };
-
+            // Set up http client
             let http_client = reqwest::Client::new();
+
+            // Construct request
             let mut json = HashMap::new();
             json.insert("storage_account", pubkey);
 
+            // Send POST request to shadow drive for storage account info
             let response = http_client
                 .post(format!("{endpoint}/storage-account-info"))
                 .json(&json)
                 .send()
                 .await?;
 
-            let key_bytes = sugar_config.keypair.to_bytes();
-            let keypair = Keypair::from_bytes(&key_bytes)?;
-
             match response.status() {
+
+                // Handle successful request by unpacking response, constructing return value
                 StatusCode::OK => {
+
                     let body = response.json::<Value>().await?;
                     let storage_info: StorageInfo = serde_json::from_value(body)?;
 
-                    Ok(Self(Arc::new(Config {
+                    return Ok(Self(Arc::new(Config {
                         endpoint: endpoint.to_string(),
                         keypair,
                         storage_account: Pubkey::from_str(pubkey)?,
                         storage_info,
                     })))
-                }
-                code => Err(anyhow!("Could not initialize storage account: {code}")),
+                },
+
+                // If request was not sucessful, return error
+                code => return Err(anyhow!("Failed to fetch storage account {pubkey} info: {code}"))
             }
         } else {
-            Err(anyhow!(
-                "Missing 'shdwStorageAccount' value in config file."
-            ))
+
+            // If the user did not provide a storage account public key,
+            // attempt to initialize the smallest possible storage account
+
+            // First ask user for permission to initialize a storage account
+            get_user_consent_to_initialize_storage_account()?;
+
+            // Then initialize the storage account
+            let (storage_account, storage_info) = initialize_storage_account(&keypair)?;
+
+            // Return this new storage account
+            Ok(Self(Arc::new(Config {
+                endpoint: endpoint.to_string(),
+                keypair,
+                storage_account,
+                storage_info,
+            })))
         }
     }
 }
