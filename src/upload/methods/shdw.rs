@@ -293,3 +293,62 @@ fn expand_storage_account(sugar_config: &SugarConfig, additional_bytes_required:
 }
 
 
+
+/// This function fetches all of the files and their sizes
+/// within a storage account 
+async fn get_file_sizes(config: &Config) -> Result<HashMap<String, u64>> {
+
+    // Set up http client
+    let http_client = reqwest::Client::new();
+
+    // Construct request
+    let mut json = HashMap::new();
+    json.insert("storage_account", config.storage_account);
+
+    // Send POST request to shadow drive for storage account info
+    let response = http_client
+        .post(format!("{}/list-objects-and-sizes",config.endpoint))
+        .json(&json)
+        .send()
+        .await?;
+
+
+    match response.status() {
+
+        // Handle successful request by unpacking response, constructing return value
+        StatusCode::OK => {
+
+            // Initialize hashmap
+            let mut hashmap = HashMap::new();
+
+            // Get files and their sizes
+            let body = response.json::<Value>().await?;
+            let files: Files = serde_json::from_value(body)?;
+
+            // Construct hashmap
+            for file in files.files {
+                hashmap.insert(file.file_name, file.size);
+            }
+
+            return Ok(hashmap)
+        },
+
+        // If request was not sucessful, return error
+        code => return Err(anyhow!("Failed to get file sizes for {} info: {code}", config.storage_account))
+    }
+}
+
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct Files {
+    files: Vec<File>
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct File {
+    file_name: String,
+    size: u64,
+    last_modified: String,
+}
